@@ -99,8 +99,11 @@ export function SessionProvider({ children }) {
         if (isCurrentHost) {
           // Host captures its screen and sends offer to client
           try {
-            const stream = await webrtcService.startScreenCapture();
-            setRemoteStream(stream);
+            let stream = remoteStream || webrtcService.localStream;
+            if (!stream) {
+              stream = await webrtcService.startScreenCapture();
+              setRemoteStream(stream);
+            }
             await webrtcService.createOffer(data.sessionCode);
             console.log('[SessionContext] Host screen offer dispatched successfully.');
           } catch (captureErr) {
@@ -234,7 +237,7 @@ export function SessionProvider({ children }) {
         }
         return curr;
       });
-    }, 20000);
+    }, 60000);
 
     socket.emit('connection_request', {
       hostCode: cleanTarget,
@@ -250,10 +253,19 @@ export function SessionProvider({ children }) {
     });
   };
 
-  // Host approves incoming connection request
-  const acceptIncomingConnection = (customPermissions) => {
+  // Host approves incoming connection request (Screen capture triggered on user click gesture)
+  const acceptIncomingConnection = async (customPermissions) => {
     if (!incomingRequest) return;
     const socket = getSocket();
+
+    try {
+      const stream = await webrtcService.startScreenCapture();
+      setRemoteStream(stream);
+    } catch (err) {
+      console.warn('[SessionContext] Screen capture selection cancelled or failed:', err);
+      alert('Screen sharing permission is required to allow remote access. Please choose your screen when prompted.');
+      return;
+    }
 
     socket.emit('connection_response', {
       requestId: incomingRequest.requestId,
