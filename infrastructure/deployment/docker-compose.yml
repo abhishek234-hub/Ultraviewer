@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  remotex-db:
+    image: mysql:8.0
+    container_name: remotex-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: remotex_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ../../database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - remotex-network
+
+  remotex-coturn:
+    image: coturn/coturn:latest
+    container_name: remotex-coturn
+    restart: always
+    network_mode: host
+    volumes:
+      - ../coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+
+  remotex-backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: remotex-backend
+    restart: always
+    environment:
+      PORT: 5050
+      DB_HOST: remotex-db
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: remotex_db
+      JWT_SECRET: remotex_super_secure_jwt_secret_token_key_2026_xyz987
+      STUN_SERVER: stun:stun.l.google.com:19302
+      TURN_SERVER: turn:localhost:3478
+      TURN_CREDENTIAL: remotex_secret_turn_pass
+    ports:
+      - "5050:5050"
+    depends_on:
+      - remotex-db
+    networks:
+      - remotex-network
+
+volumes:
+  db_data:
+
+networks:
+  remotex-network:
+    driver: bridge

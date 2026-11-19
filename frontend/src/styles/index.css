@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dark-bg: #0a0e17;
+  --color-dark-surface: #101726;
+  --color-dark-card: #151e32;
+  --color-dark-cardHover: #1b2640;
+  --color-dark-input: #0d1321;
+  --color-dark-border: #1e293b;
+  --color-dark-borderHover: #334155;
+  --color-brand-blue: #2563eb;
+  --color-brand-blueHover: #1d4ed8;
+  --color-brand-cyan: #06b6d4;
+  --color-brand-cyanGlow: #38bdf8;
+}
+
+body {
+  background-color: #0a0e17;
+  color: #f8fafc;
+  overflow: hidden;
+  user-select: none;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Slim Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #101726;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a374f;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2563eb;
+}
+
+/* Electron Window Drag Regions */
+.window-drag {
+  -webkit-app-region: drag;
+}
+
+.window-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.18s ease-out forwards;
+}
