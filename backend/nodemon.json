@@ -1,0 +1,24 @@
+{
+  "watch": [
+    "controllers",
+    "middleware",
+    "models",
+    "routes",
+    "services",
+    "sockets",
+    "utils",
+    "validators",
+    "config",
+    "app.js",
+    "server.js"
+  ],
+  "ext": "js,mjs,json",
+  "ignore": [
+    "node_modules",
+    "uploads/*",
+    "prisma/*",
+    "*.test.js",
+    "test/**"
+  ],
+  "delay": 500
+}
