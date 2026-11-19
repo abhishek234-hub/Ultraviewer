@@ -44,6 +44,14 @@ function createWindow() {
     }
   });
 
+  // Explicitly allow media and screen capture requests in Electron renderer
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(true);
+  });
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    return true;
+  });
+
   // Setup security policies
   setupSecurity(mainWindow);
 

@@ -77,9 +77,10 @@ export function SessionProvider({ children }) {
 
       // Initialize WebRTC
       try {
-        await webrtcService.initializePeerConnection(data.iceServers);
+        await webrtcService.initializePeerConnection(data.iceServers, data.sessionCode);
 
         webrtcService.onRemoteStreamCallback = (stream) => {
+          console.log('[SessionContext] Remote screen stream received, tracks:', stream.getTracks().length);
           setRemoteStream(stream);
         };
 
@@ -94,13 +95,19 @@ export function SessionProvider({ children }) {
 
         if (isCurrentHost) {
           // Host captures its screen and sends offer to client
-          const stream = await webrtcService.startScreenCapture();
-          setRemoteStream(stream);
-          await webrtcService.createOffer(data.sessionCode);
+          try {
+            const stream = await webrtcService.startScreenCapture();
+            setRemoteStream(stream);
+            await webrtcService.createOffer(data.sessionCode);
+            console.log('[SessionContext] Host screen offer dispatched successfully.');
+          } catch (captureErr) {
+            console.error('[SessionContext] Host screen capture failed:', captureErr);
+            alert(`Host screen capture error: ${captureErr.message || captureErr}`);
+          }
+        } else {
+          // Client navigates to active session view to view remote screen
+          navigate('/session');
         }
-
-        // Navigate to active session view
-        navigate('/session');
       } catch (err) {
         console.error('[SessionContext] WebRTC startup error:', err);
       }
@@ -201,7 +208,7 @@ export function SessionProvider({ children }) {
   }, [deviceCode, navigate]);
 
   // Client connects to remote Host
-  const connectToRemote = (targetRemoteCode, permissions) => {
+  const connectToRemote = (targetRemoteCode, partnerPassword = '', permissions) => {
     const socket = getSocket();
     if (!socket.connected) {
       socket.connect();
@@ -228,6 +235,7 @@ export function SessionProvider({ children }) {
       hostCode: cleanTarget,
       clientCode: deviceCode,
       clientName: deviceName,
+      password: partnerPassword,
       permissions: permissions || {
         mouseKeyboard: true,
         fileTransfer: true,

@@ -10,14 +10,16 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const isSessionView = location.pathname === '/session';
+  const isDashboard = location.pathname === '/dashboard' || location.pathname === '/';
+  const showSidebar = !isSessionView && !isDashboard;
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-dark-bg text-slate-100 overflow-hidden select-none">
+    <div className={`flex flex-col h-screen w-screen ${isSessionView ? 'bg-black' : 'bg-[#eef2f6]'} overflow-hidden select-none`}>
       {/* Frameless TitleBar */}
       <TitleBar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} isSessionView={isSessionView} />
 
-      {/* Mobile Header Bar for small screens (hidden during active remote session) */}
-      {!isSessionView && (
+      {/* Mobile Header Bar for small screens (hidden during session or dashboard) */}
+      {!isSessionView && showSidebar && (
         <div className="lg:hidden flex items-center justify-between px-4 py-2.5 bg-dark-surface border-b border-dark-border z-20">
           <div className="flex items-center gap-2 text-sky-400 font-bold text-sm tracking-wide">
             <MonitorPlay className="w-4 h-4" />
@@ -33,10 +35,10 @@ export default function AppLayout() {
         </div>
       )}
 
-      {/* Main Body: Full width & height without sidebar or padding during active session */}
+      {/* Main Body */}
       <div className="flex flex-1 overflow-hidden relative">
-        {!isSessionView && <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />}
-        <main className={`flex-1 bg-dark-bg overflow-hidden flex flex-col ${isSessionView ? 'p-0 w-full h-full' : 'p-4 sm:p-6 lg:p-8 overflow-y-auto'}`}>
+        {showSidebar && <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />}
+        <main className={`flex-1 overflow-hidden flex flex-col ${isSessionView || isDashboard ? 'p-0 w-full h-full' : 'p-4 sm:p-6 lg:p-8 overflow-y-auto bg-dark-bg text-slate-100'}`}>
           <Outlet />
         </main>
       </div>
