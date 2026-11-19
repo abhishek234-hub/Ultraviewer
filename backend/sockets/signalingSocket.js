@@ -12,6 +12,28 @@ const socketToDevice = new Map();
 // Active session tracking: sessionCode -> { hostCode, clientCode, hostSocketId, clientSocketId, permissions }
 const activeSessions = new Map();
 
+export function normalizeDeviceCode(code) {
+  if (!code) return '';
+  return code.toString().trim().toUpperCase().replace(/^RX-?/i, '').replace(/[^A-Z0-9]/g, '');
+}
+
+export function findActiveDevice(code) {
+  if (!code) return null;
+  const raw = code.toString().trim().toUpperCase();
+  const normalized = normalizeDeviceCode(raw);
+
+  if (activeDevices.has(raw)) return activeDevices.get(raw);
+  if (activeDevices.has(normalized)) return activeDevices.get(normalized);
+  if (activeDevices.has(`RX-${normalized}`)) return activeDevices.get(`RX-${normalized}`);
+
+  for (const dev of activeDevices.values()) {
+    if (dev.normalizedCode === normalized || normalizeDeviceCode(dev.deviceCode) === normalized) {
+      return dev;
+    }
+  }
+  return null;
+}
+
 export function setupSignalingSocket(io) {
   io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
@@ -23,17 +45,32 @@ export function setupSignalingSocket(io) {
         if (!deviceCode) return;
 
         const cleanCode = deviceCode.trim().toUpperCase();
-        activeDevices.set(cleanCode, {
+        const normalized = normalizeDeviceCode(cleanCode);
+
+        const deviceEntry = {
           socketId: socket.id,
+          deviceCode: cleanCode,
+          normalizedCode: normalized,
           deviceName: deviceName || 'Windows PC',
           userId: userId || null,
           os: os || 'Windows 11',
+          password: data.password || null,
           connectedAt: new Date()
-        });
+        };
+
+        activeDevices.set(cleanCode, deviceEntry);
+        activeDevices.set(normalized, deviceEntry);
+        if (!cleanCode.startsWith('RX-')) {
+          activeDevices.set(`RX-${cleanCode}`, deviceEntry);
+        }
         socketToDevice.set(socket.id, cleanCode);
 
-        // Update database device status
-        await DeviceModel.updateStatus(cleanCode, 'online');
+        // Update database device status (non-blocking if DB is offline)
+        try {
+          await DeviceModel.updateStatus(cleanCode, 'online');
+        } catch (dbErr) {
+          console.warn('[Socket DB Notice] Device status DB update skipped:', dbErr.message);
+        }
 
         socket.emit('device_registered', {
           success: true,
@@ -41,7 +78,7 @@ export function setupSignalingSocket(io) {
           status: 'online'
         });
 
-        console.log(`[Socket] Device registered: ${cleanCode} (${deviceName}) on socket ${socket.id}`);
+        console.log(`[Socket] Device registered: ${cleanCode} (normalized: ${normalized}) on socket ${socket.id}`);
       } catch (err) {
         console.error('[Socket Error] register_device:', err.message);
       }
@@ -62,7 +99,7 @@ export function setupSignalingSocket(io) {
           return socket.emit('connection_error', { message: 'Cannot establish remote connection to the same device.' });
         }
 
-        const hostDevice = activeDevices.get(cleanHostCode);
+        const hostDevice = findActiveDevice(cleanHostCode);
         if (!hostDevice) {
           return socket.emit('connection_error', {
             message: `RemoteX host [${cleanHostCode}] is currently offline or unreachable.`
@@ -117,7 +154,7 @@ export function setupSignalingSocket(io) {
         const hostCode = socketToDevice.get(socket.id);
         const cleanClientCode = clientCode?.trim().toUpperCase();
 
-        const clientDevice = activeDevices.get(cleanClientCode);
+        const clientDevice = findActiveDevice(cleanClientCode);
         if (!clientDevice) {
           return socket.emit('connection_error', { message: 'Connecting client disconnected.' });
         }
@@ -134,22 +171,26 @@ export function setupSignalingSocket(io) {
         // Generate session code
         const sessionCode = 'SES-' + crypto.randomBytes(6).toString('hex').toUpperCase();
 
-        // Get DB IDs
-        const hostDb = await DeviceModel.findByCode(hostCode);
-        const clientDb = await DeviceModel.findByCode(cleanClientCode);
-
+        // Get DB IDs safely (non-blocking if cloud database is not connected)
         let sessionId = null;
-        if (hostDb && clientDb) {
-          const sess = await SessionModel.createSession(sessionCode, hostDb.id, clientDb.id, 'active');
-          sessionId = sess.id;
-          await PermissionModel.initializeDefaultPermissions(sessionId, permissions);
+        try {
+          const hostDb = await DeviceModel.findByCode(hostCode);
+          const clientDb = await DeviceModel.findByCode(cleanClientCode);
 
-          await ConnectionLogModel.log({
-            sessionId,
-            userId: clientDb.user_id || hostDb.user_id,
-            action: 'SESSION_CONNECTED',
-            ipAddress: socket.handshake.address
-          });
+          if (hostDb && clientDb) {
+            const sess = await SessionModel.createSession(sessionCode, hostDb.id, clientDb.id, 'active');
+            sessionId = sess.id;
+            await PermissionModel.initializeDefaultPermissions(sessionId, permissions);
+
+            await ConnectionLogModel.log({
+              sessionId,
+              userId: clientDb.user_id || hostDb.user_id,
+              action: 'SESSION_CONNECTED',
+              ipAddress: socket.handshake.address
+            });
+          }
+        } catch (dbErr) {
+          console.warn('[Socket DB Notice] Session DB recording skipped:', dbErr.message);
         }
 
         const sessionRoom = `session_${sessionCode}`;
@@ -302,9 +343,14 @@ export function setupSignalingSocket(io) {
     socket.on('disconnect', async () => {
       const deviceCode = socketToDevice.get(socket.id);
       if (deviceCode) {
+        const normalized = normalizeDeviceCode(deviceCode);
         activeDevices.delete(deviceCode);
+        activeDevices.delete(normalized);
+        activeDevices.delete(`RX-${normalized}`);
         socketToDevice.delete(socket.id);
-        await DeviceModel.updateStatus(deviceCode, 'offline');
+        try {
+          await DeviceModel.updateStatus(deviceCode, 'offline');
+        } catch (e) {}
         console.log(`[Socket] Device offline: ${deviceCode}`);
       }
 
