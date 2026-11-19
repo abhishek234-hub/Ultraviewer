@@ -32,6 +32,11 @@ const io = new Server(server, {
 setupSignalingSocket(io);
 setupSessionSocket(io);
 
+// Attach /socket namespace alias so clients connecting to /socket are also supported
+const socketNs = io.of('/socket');
+setupSignalingSocket(socketNs);
+setupSessionSocket(socketNs);
+
 async function startServer() {
   try {
     const isDbConnected = await testConnection();

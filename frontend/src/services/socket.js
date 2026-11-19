@@ -1,6 +1,13 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL || 'http://localhost:5050';
+function getSanitizedServerUrl() {
+  let url = import.meta.env.VITE_SOCKET_SERVER_URL || 'http://localhost:5050';
+  // Strip trailing /socket or slashes so Socket.IO connects to the root namespace
+  url = url.trim().replace(/\/socket\/?$/, '').replace(/\/+$/, '');
+  return url;
+}
+
+const SOCKET_SERVER_URL = getSanitizedServerUrl();
 
 let socket = null;
 
@@ -9,9 +16,19 @@ export function getSocket() {
     socket = io(SOCKET_SERVER_URL, {
       autoConnect: false,
       reconnection: true,
-      reconnectionAttempts: 20,
+      reconnectionAttempts: 25,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
       transports: ['websocket', 'polling']
+    });
+
+    socket.on('connect', () => {
+      console.log('[Socket.IO] Connected successfully to:', SOCKET_SERVER_URL, 'ID:', socket.id);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.warn('[Socket.IO] Connection error:', err.message);
     });
   }
   return socket;

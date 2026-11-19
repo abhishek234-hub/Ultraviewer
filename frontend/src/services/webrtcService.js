@@ -100,30 +100,39 @@ class WebRTCService {
   // Host captures local screen stream
   async startScreenCapture(sourceId = null) {
     try {
-      let stream;
-      if (window.remotexApi?.isElectron) {
-        const sources = await window.remotexApi.getScreenSources();
-        const selected = sourceId ? sources.find(s => s.id === sourceId) : sources[0];
-        const screenSourceId = selected ? selected.id : sources[0]?.id;
+      let stream = null;
 
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            mandatory: {
-              chromeMediaSource: 'desktop',
-              chromeMediaSourceId: screenSourceId,
-              minWidth: 1280,
-              maxWidth: 1920,
-              minHeight: 720,
-              maxHeight: 1080,
-              maxFrameRate: 60
-            }
+      if (window.remotexApi?.isElectron) {
+        try {
+          const sources = await window.remotexApi.getScreenSources();
+          const selected = sourceId ? sources.find(s => s.id === sourceId) : sources[0];
+          const screenSourceId = selected ? selected.id : sources[0]?.id;
+
+          if (screenSourceId) {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: {
+                mandatory: {
+                  chromeMediaSource: 'desktop',
+                  chromeMediaSourceId: screenSourceId,
+                  maxFrameRate: 60
+                }
+              }
+            });
           }
-        });
-      } else {
-        // Browser fallback / test mode
+        } catch (ipcErr) {
+          console.warn('[WebRTC] getUserMedia with chromeMediaSource failed, falling back to getDisplayMedia:', ipcErr.message);
+        }
+      }
+
+      // Universal fallback for Electron & Modern Browsers
+      if (!stream) {
         stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: 60 },
+          video: {
+            cursor: 'always',
+            displaySurface: 'monitor',
+            frameRate: { ideal: 60, max: 60 }
+          },
           audio: false
         });
       }
@@ -132,8 +141,15 @@ class WebRTCService {
 
       // Add tracks to PeerConnection
       if (this.peerConnection) {
+        // Remove existing tracks first if switching displays
+        const senders = this.peerConnection.getSenders();
         stream.getTracks().forEach((track) => {
-          this.peerConnection.addTrack(track, stream);
+          const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
+          if (existingSender) {
+            existingSender.replaceTrack(track);
+          } else {
+            this.peerConnection.addTrack(track, stream);
+          }
         });
       }
 

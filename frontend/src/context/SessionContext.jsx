@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSocket } from '../services/socket';
 import webrtcService from '../services/webrtcService';
@@ -9,6 +9,7 @@ const SessionContext = createContext(null);
 export function SessionProvider({ children }) {
   const { deviceCode, deviceName } = useDevice();
   const navigate = useNavigate();
+  const connectionTimeoutRef = useRef(null);
 
   const [activeSession, setActiveSession] = useState(null);
   const [isHost, setIsHost] = useState(false);
@@ -44,13 +45,23 @@ export function SessionProvider({ children }) {
 
     // 3. Client connection rejected
     const onConnectionRejected = (data) => {
+      if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
       setConnectingState(null);
       alert(`Connection Request Rejected: ${data.reason}`);
+    };
+
+    // 3b. Client connection error
+    const onConnectionError = (data) => {
+      console.warn('[SessionContext] Connection error:', data);
+      if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
+      setConnectingState(null);
+      alert(data.message || 'Unable to connect to remote partner.');
     };
 
     // 4. Session Established (Both Host and Client)
     const onSessionEstablished = async (data) => {
       console.log('[SessionContext] Session established:', data);
+      if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
       const isCurrentHost = data.hostCode === deviceCode;
 
       setIsHost(isCurrentHost);
@@ -161,6 +172,7 @@ export function SessionProvider({ children }) {
     socket.on('incoming_connection', onIncomingConnection);
     socket.on('connection_pending', onConnectionPending);
     socket.on('connection_rejected', onConnectionRejected);
+    socket.on('connection_error', onConnectionError);
     socket.on('session_established', onSessionEstablished);
     socket.on('webrtc_offer', onWebRTCOffer);
     socket.on('webrtc_answer', onWebRTCAnswer);
@@ -175,6 +187,7 @@ export function SessionProvider({ children }) {
       socket.off('incoming_connection', onIncomingConnection);
       socket.off('connection_pending', onConnectionPending);
       socket.off('connection_rejected', onConnectionRejected);
+      socket.off('connection_error', onConnectionError);
       socket.off('session_established', onSessionEstablished);
       socket.off('webrtc_offer', onWebRTCOffer);
       socket.off('webrtc_answer', onWebRTCAnswer);
@@ -190,13 +203,29 @@ export function SessionProvider({ children }) {
   // Client connects to remote Host
   const connectToRemote = (targetRemoteCode, permissions) => {
     const socket = getSocket();
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    const cleanTarget = targetRemoteCode.trim().toUpperCase();
     setConnectingState({
       status: 'connecting',
-      message: `Connecting to ${targetRemoteCode}...`
+      message: `Connecting to ${cleanTarget}...`
     });
 
+    if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
+    connectionTimeoutRef.current = setTimeout(() => {
+      setConnectingState((curr) => {
+        if (curr && (curr.status === 'connecting' || curr.status === 'awaiting_approval')) {
+          alert(`Connection to [${cleanTarget}] timed out.\n\nPlease verify:\n1. RemoteX is open on your partner's laptop.\n2. Partner device ID is correct: ${cleanTarget}.\n3. Both computers are connected to the internet.`);
+          return null;
+        }
+        return curr;
+      });
+    }, 20000);
+
     socket.emit('connection_request', {
-      hostCode: targetRemoteCode.trim().toUpperCase(),
+      hostCode: cleanTarget,
       clientCode: deviceCode,
       clientName: deviceName,
       permissions: permissions || {

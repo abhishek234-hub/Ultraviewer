@@ -7,7 +7,10 @@ import {
   ShieldAlert,
   Zap,
   Send,
-  X
+  X,
+  Loader2,
+  Scan,
+  StretchHorizontal
 } from 'lucide-react';
 import { useSession } from '../context/SessionContext';
 import webrtcService from '../services/webrtcService';
@@ -32,12 +35,16 @@ export default function RemoteSession() {
   const [chatInput, setChatInput] = useState('');
   const [displaySources, setDisplaySources] = useState([]);
   const [selectedSource, setSelectedSource] = useState(null);
+  const [viewMode, setViewMode] = useState('fit'); // 'fit' | 'stretch' | 'original'
 
   // Attach WebRTC stream to video element
   useEffect(() => {
     if (videoRef.current && remoteStream) {
       videoRef.current.srcObject = remoteStream;
-      videoRef.current.play().catch(e => console.warn('[Video Play]', e));
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current.play().catch(e => console.warn('[Video Play]', e));
+      };
+      videoRef.current.play().catch(e => console.warn('[Video Play immediate]', e));
     }
   }, [remoteStream]);
 
@@ -78,6 +85,15 @@ export default function RemoteSession() {
     }
   };
 
+  // Toggle View Mode (Fit to Window -> Stretch / Fill -> Original)
+  const cycleViewMode = () => {
+    setViewMode((prev) => {
+      if (prev === 'fit') return 'stretch';
+      if (prev === 'stretch') return 'original';
+      return 'fit';
+    });
+  };
+
   // Remote Mouse Movement & Normalized Coordinates
   const handleMouseMove = (e) => {
     if (isHost || !sessionPermissions.mouseKeyboard) return;
@@ -85,6 +101,8 @@ export default function RemoteSession() {
     if (!video) return;
 
     const rect = video.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
     const nx = (e.clientX - rect.left) / rect.width;
     const ny = (e.clientY - rect.top) / rect.height;
 
@@ -119,7 +137,8 @@ export default function RemoteSession() {
     if (isHost || !sessionPermissions.mouseKeyboard) return;
     webrtcService.sendInput({
       type: 'wheel',
-      deltaY: e.deltaY > 0 ? -120 : 120
+      deltaX: e.deltaX,
+      deltaY: e.deltaY
     });
   };
 
@@ -127,25 +146,38 @@ export default function RemoteSession() {
     e.preventDefault();
   };
 
-  // Keyboard Event Handlers
+  // Remote Keyboard Input Handling
   const handleKeyDown = (e) => {
     if (isHost || !sessionPermissions.mouseKeyboard) return;
-    if (['F5', 'F11', 'F12'].includes(e.key)) return;
-    e.preventDefault();
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
+    e.preventDefault();
     webrtcService.sendInput({
       type: 'keydown',
-      vk: e.keyCode || e.which
+      key: e.key,
+      code: e.code,
+      keyCode: e.keyCode,
+      altKey: e.altKey,
+      ctrlKey: e.ctrlKey,
+      shiftKey: e.shiftKey,
+      metaKey: e.metaKey
     });
   };
 
   const handleKeyUp = (e) => {
     if (isHost || !sessionPermissions.mouseKeyboard) return;
-    e.preventDefault();
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
+    e.preventDefault();
     webrtcService.sendInput({
       type: 'keyup',
-      vk: e.keyCode || e.which
+      key: e.key,
+      code: e.code,
+      keyCode: e.keyCode,
+      altKey: e.altKey,
+      ctrlKey: e.ctrlKey,
+      shiftKey: e.shiftKey,
+      metaKey: e.metaKey
     });
   };
 
@@ -170,6 +202,13 @@ export default function RemoteSession() {
       </div>
     );
   }
+
+  // Determine video styling class based on selected view mode
+  const getVideoClass = () => {
+    if (viewMode === 'stretch') return 'w-full h-full object-fill cursor-crosshair';
+    if (viewMode === 'original') return 'max-w-none max-h-none object-none cursor-crosshair';
+    return 'w-full h-full object-contain cursor-crosshair'; // 'fit' default
+  };
 
   return (
     <div
@@ -196,7 +235,7 @@ export default function RemoteSession() {
       )}
 
       {/* Floating Session Toolbar */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-dark-surface/90 backdrop-blur-md border border-dark-border px-3.5 py-1.5 rounded-full flex items-center gap-2 shadow-2xl z-30">
+      <div className="absolute top-3 left-1/2 transform -translate-x-1/2 bg-dark-card/95 backdrop-blur-md border border-dark-border px-3 py-1.5 rounded-full flex items-center gap-2 shadow-2xl z-30">
         <div className="flex items-center gap-1.5 px-2 text-xs font-medium text-emerald-400">
           <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
           <span className="hidden sm:inline">{connectionQuality}</span>
@@ -216,6 +255,20 @@ export default function RemoteSession() {
             ))}
           </select>
         )}
+
+        {/* View Mode Toggle Button: Fit Screen / Stretch / 1:1 */}
+        <button
+          onClick={cycleViewMode}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+          title={`View Mode: ${viewMode.toUpperCase()} (Click to toggle Fit / Stretch / 1:1)`}
+        >
+          {viewMode === 'stretch' ? (
+            <StretchHorizontal className="w-3.5 h-3.5 text-sky-400" />
+          ) : (
+            <Scan className="w-3.5 h-3.5 text-sky-400" />
+          )}
+          <span className="capitalize">{viewMode}</span>
+        </button>
 
         {/* Fullscreen Button */}
         <button
@@ -260,19 +313,32 @@ export default function RemoteSession() {
         </button>
       </div>
 
-      {/* Remote Screen Video View */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        onMouseMove={handleMouseMove}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onWheel={handleWheel}
-        onContextMenu={handleContextMenu}
-        className="max-w-full max-h-full object-contain cursor-crosshair"
-      />
+      {/* Waiting Indicator if video feed hasn't arrived yet */}
+      {!remoteStream && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-slate-300 space-y-3 z-20">
+          <Loader2 className="w-12 h-12 text-sky-400 animate-spin" />
+          <div className="text-base font-bold text-white">Receiving Partner's Screen...</div>
+          <p className="text-xs text-slate-400 max-w-sm text-center">
+            Establishing secure high-speed WebRTC peer connection. The remote laptop display will appear momentarily.
+          </p>
+        </div>
+      )}
+
+      {/* Remote Screen Video View (Puraa View - Edge-to-Edge) */}
+      <div className={`w-full h-full flex items-center justify-center ${viewMode === 'original' ? 'overflow-auto' : 'overflow-hidden'}`}>
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          onMouseMove={handleMouseMove}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onWheel={handleWheel}
+          onContextMenu={handleContextMenu}
+          className={getVideoClass()}
+        />
+      </div>
 
       {/* Chat Overlay Drawer */}
       {showChat && (
