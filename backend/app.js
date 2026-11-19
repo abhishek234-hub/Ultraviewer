@@ -39,6 +39,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Apply rate limiter to API routes
 app.use('/api', apiLimiter);
 
+// Root status endpoint
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    product: 'RemoteX Backend & WebRTC Signaling Server',
+    version: '1.0.0',
+    health: '/api/health'
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
   const dbOk = await testConnection();

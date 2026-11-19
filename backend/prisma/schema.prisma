@@ -7,6 +7,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum DeviceStatus {
+  online
+  offline
+  busy
+}
+
+enum SessionStatus {
+  pending
+  active
+  ended
+  rejected
+}
+
+enum TransferStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+  failed
+}
+
 model User {
   id            Int             @id @default(autoincrement())
   name          String          @db.VarChar(255)
@@ -24,15 +45,15 @@ model User {
 }
 
 model Device {
-  id                       Int       @id @default(autoincrement())
+  id                       Int          @id @default(autoincrement())
   user_id                  Int?
-  device_name              String    @db.VarChar(255)
-  device_code              String    @unique @db.VarChar(64)
-  operating_system         String?   @default("Windows") @db.VarChar(100)
-  device_status            String?   @default("offline") @db.VarChar(20)
-  unattended_password_hash String?   @db.VarChar(255)
-  last_seen                DateTime? @default(now()) @db.DateTime(0)
-  created_at               DateTime? @default(now()) @db.DateTime(0)
+  device_name              String       @db.VarChar(255)
+  device_code              String       @unique @db.VarChar(64)
+  operating_system         String?      @default("Windows") @db.VarChar(100)
+  device_status            DeviceStatus? @default(offline)
+  unattended_password_hash String?      @db.VarChar(255)
+  last_seen                DateTime?    @default(now()) @db.DateTime(0)
+  created_at               DateTime?    @default(now()) @db.DateTime(0)
 
   user             User?           @relation(fields: [user_id], references: [id], onDelete: Cascade)
   host_sessions    Session[]       @relation("HostDevice")
@@ -46,13 +67,13 @@ model Device {
 }
 
 model Session {
-  id               Int       @id @default(autoincrement())
-  session_code     String    @unique @db.VarChar(64)
+  id               Int           @id @default(autoincrement())
+  session_code     String        @unique @db.VarChar(64)
   host_device_id   Int
   client_device_id Int
-  session_status   String?   @default("pending") @db.VarChar(20)
-  started_at       DateTime? @default(now()) @db.DateTime(0)
-  ended_at         DateTime? @db.DateTime(0)
+  session_status   SessionStatus? @default(pending)
+  started_at       DateTime?     @default(now()) @db.DateTime(0)
+  ended_at         DateTime?     @db.DateTime(0)
 
   host_device     Device              @relation("HostDevice", fields: [host_device_id], references: [id], onDelete: Cascade)
   client_device   Device              @relation("ClientDevice", fields: [client_device_id], references: [id], onDelete: Cascade)
@@ -113,12 +134,12 @@ model ConnectionLog {
 }
 
 model FileTransfer {
-  id              Int       @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   session_id      Int
-  file_name       String    @db.VarChar(255)
+  file_name       String         @db.VarChar(255)
   file_size       BigInt
-  transfer_status String?   @default("pending") @db.VarChar(20)
-  created_at      DateTime? @default(now()) @db.DateTime(0)
+  transfer_status TransferStatus? @default(pending)
+  created_at      DateTime?      @default(now()) @db.DateTime(0)
 
   session Session @relation(fields: [session_id], references: [id], onDelete: Cascade)
 
