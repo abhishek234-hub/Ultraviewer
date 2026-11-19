@@ -62,7 +62,10 @@ export function SessionProvider({ children }) {
     const onSessionEstablished = async (data) => {
       console.log('[SessionContext] Session established:', data);
       if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
-      const isCurrentHost = data.hostCode === deviceCode;
+      
+      const myNorm = (deviceCode || '').toString().trim().toUpperCase().replace(/^RX-?/i, '').replace(/[^0-9A-Z]/g, '');
+      const hostNorm = (data.hostCode || '').toString().trim().toUpperCase().replace(/^RX-?/i, '').replace(/[^0-9A-Z]/g, '');
+      const isCurrentHost = (data.hostCode === deviceCode) || (myNorm === hostNorm);
 
       setIsHost(isCurrentHost);
       setActiveSession(data);
@@ -214,7 +217,9 @@ export function SessionProvider({ children }) {
       socket.connect();
     }
 
-    const cleanTarget = targetRemoteCode.trim().toUpperCase();
+    const cleanTarget = targetRemoteCode.toString().trim().toUpperCase().replace(/^RX-?/i, '').replace(/[^0-9A-Z]/g, '');
+    const cleanClientCode = deviceCode.toString().trim().toUpperCase().replace(/^RX-?/i, '').replace(/[^0-9A-Z]/g, '');
+
     setConnectingState({
       status: 'connecting',
       message: `Connecting to ${cleanTarget}...`
@@ -233,7 +238,7 @@ export function SessionProvider({ children }) {
 
     socket.emit('connection_request', {
       hostCode: cleanTarget,
-      clientCode: deviceCode,
+      clientCode: cleanClientCode,
       clientName: deviceName,
       password: partnerPassword,
       permissions: permissions || {

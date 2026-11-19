@@ -11,14 +11,15 @@ export function DeviceProvider({ children }) {
   const [deviceCode, setDeviceCode] = useState(() => {
     let saved = localStorage.getItem('remotex_device_code');
     if (!saved) {
-      // 9-digit code formatted as clean digits or RX-XXX-XXX-XXX
+      // 9-digit pure numeric code just like UltraViewer: e.g. 361156117
       const p1 = Math.floor(100 + Math.random() * 900);
       const p2 = Math.floor(100 + Math.random() * 900);
       const p3 = Math.floor(100 + Math.random() * 900);
-      saved = `RX-${p1}-${p2}-${p3}`;
+      saved = `${p1}${p2}${p3}`;
       localStorage.setItem('remotex_device_code', saved);
     }
-    return saved;
+    const cleanDigits = saved.replace(/^RX-?/i, '').replace(/[^0-9]/g, '');
+    return cleanDigits.length >= 6 ? cleanDigits : saved;
   });
 
   const [devicePassword, setDevicePassword] = useState(() => {

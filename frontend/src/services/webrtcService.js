@@ -148,14 +148,21 @@ class WebRTCService {
 
       // Universal fallback for Electron & Modern Browsers
       if (!stream) {
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            cursor: 'always',
-            displaySurface: 'monitor',
-            frameRate: { ideal: 60, max: 60 }
-          },
-          audio: false
-        });
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              cursor: 'always',
+              frameRate: { ideal: 60, max: 60 }
+            },
+            audio: false
+          });
+        } catch (err1) {
+          console.warn('[WebRTC] getDisplayMedia with constraints failed, trying basic:', err1.message);
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: false
+          });
+        }
       }
 
       stream.getVideoTracks().forEach(t => {
